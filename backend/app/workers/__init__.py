@@ -1,0 +1,1 @@
+"""Package workers — tâches Celery asynchrones (MAC spoofing, chatbot)."""
