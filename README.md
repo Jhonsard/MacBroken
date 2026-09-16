@@ -75,4 +75,3 @@ docker compose exec backend alembic upgrade head
 Voir `Guide.md` — architecture 3-tiers modulaire.
 =======
 # MacBroken
->>>>>>> c3629b7d22254433faab9e078ea1b8f3c3fd2e2a
