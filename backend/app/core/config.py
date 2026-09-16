@@ -54,6 +54,18 @@ class Settings(BaseSettings):
     # --- Worker MAC ---
     DEFAULT_INTERFACE: str = "eth0"
     IP_BIN: str = "/usr/sbin/ip"
+    MAC_SPOOF_DRY_RUN: bool = True
+    MAC_SPOOF_RATE_LIMIT_SECONDS: int = 30
+    MAC_SPOOF_CMD_TIMEOUT: int = 5
+
+    ALLOWED_INTERFACES: list[str] = []
+
+    @field_validator("ALLOWED_INTERFACES", mode="before")
+    @classmethod
+    def _split_ifaces(cls, v: str | list[str]) -> list[str]:
+        if isinstance(v, str):
+            return [item.strip() for item in v.split(",") if item.strip()]
+        return v
 
     # --- Frontend ---
     VITE_API_BASE_URL: str = "http://localhost:8000/api/v1"

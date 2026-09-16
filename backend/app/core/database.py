@@ -40,6 +40,46 @@ AsyncSessionLocal = async_sessionmaker(
     autoflush=False,
 )
 
+# ------------------------------------------------------------------
+# Moteur sync (Celery / Alembic)
+# ------------------------------------------------------------------
+from contextlib import contextmanager
+from collections.abc import Iterator
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
+
+sync_engine = create_engine(
+    str(settings.DATABASE_URL_SYNC),
+    pool_pre_ping=True,
+    pool_size=5,
+    max_overflow=10,
+    pool_recycle=1800,
+    echo=False,
+)
+
+SyncSessionLocal = sessionmaker(
+    bind=sync_engine,
+    class_=Session,
+    expire_on_commit=False,
+    autoflush=False,
+)
+
+
+@contextmanager
+def sync_session_scope() -> Iterator[Session]:
+    """
+    Context manager sync (utilisé par Celery) : commit auto,
+    rollback auto en cas d'exception, fermeture garantie.
+    """
+    session = SyncSessionLocal()
+    try:
+        yield session
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """

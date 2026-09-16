@@ -1,15 +1,16 @@
-"""
-Point d'entrée FastAPI — API Gateway de la plateforme MAC Spoofing.
-"""
+"""Point d'entrée FastAPI — API Gateway."""
 from __future__ import annotations
 
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.auth import router as auth_router
 from app.api.v1.health import router as health_router
+from app.api.v1.mac import router as mac_router
+from app.core.cache import close_redis
 from app.core.config import settings
 
 logging.basicConfig(
@@ -19,14 +20,27 @@ logging.basicConfig(
 logger = logging.getLogger("app")
 
 
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    logger.info(
+        "Démarrage %s (env=%s, debug=%s, dry_run=%s)",
+        settings.APP_NAME, settings.APP_ENV, settings.DEBUG,
+        settings.MAC_SPOOF_DRY_RUN,
+    )
+    yield
+    await close_redis()
+    logger.info("Arrêt de l'application.")
+
+
 def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.APP_NAME,
-        version="0.2.0",
+        version="0.3.0",
         description="Plateforme de MAC Spoofing sécurisée — API Gateway.",
         docs_url="/docs" if settings.DEBUG else None,
         redoc_url="/redoc" if settings.DEBUG else None,
         openapi_url="/openapi.json" if settings.DEBUG else None,
+        lifespan=lifespan,
     )
 
     if settings.BACKEND_CORS_ORIGINS:
@@ -38,20 +52,9 @@ def create_app() -> FastAPI:
             allow_headers=["*"],
         )
 
-    # --- Routers v1 ---
     app.include_router(health_router, prefix="/api/v1")
     app.include_router(auth_router, prefix="/api/v1")
-
-    @app.on_event("startup")
-    async def _on_startup() -> None:
-        logger.info(
-            "Démarrage %s (env=%s, debug=%s)",
-            settings.APP_NAME, settings.APP_ENV, settings.DEBUG,
-        )
-
-    @app.on_event("shutdown")
-    async def _on_shutdown() -> None:
-        logger.info("Arrêt de l'application.")
+    app.include_router(mac_router, prefix="/api/v1")
 
     return app
 

@@ -15,13 +15,18 @@ WORKDIR /app
 # `iproute2` = binaire `ip` requis par le worker
 # `curl`     = healthchecks
 # `gcc`+`libpq` = build psycopg2 (retirés en stage final)
+# --- Dépendances système ---
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential \
         libpq-dev \
         iproute2 \
+        libcap2-bin \
         curl \
         ca-certificates \
     && rm -rf /var/lib/apt/lists/*
+
+# --- Capability NET_ADMIN sur le binaire `ip` (permet à appuser de l'exécuter) ---
+RUN setcap cap_net_admin+ep "$(which ip)"
 
 # --- Dépendances Python ---
 COPY requirements.txt .
