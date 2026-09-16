@@ -1,0 +1,177 @@
+# ============================================================
+#  MAC Spoofing Platform — Orchestration Docker Compose v2
+#  Services : postgres, redis, backend (FastAPI), worker (Celery), flower, frontend
+# ============================================================
+
+name: mac-spoofing-platform
+
+x-backend-base: &backend-base
+  build:
+    context: ./backend
+    dockerfile: Dockerfile
+  env_file:
+    - .env
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  restart: unless-stopped
+  networks:
+    - macnet
+
+services:
+
+  # ------------------------------------------------------------
+  # PostgreSQL 16 — Base transactionnelle + journaux d'audit
+  # ------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: mac_postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "127.0.0.1:5432:5432"     # exposé uniquement en local pour psql/IDE
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - macnet
+
+  # ------------------------------------------------------------
+  # Redis 7 — Broker Celery + cache sessions
+  # ------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: mac_redis
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --maxmemory
+      - "256mb"
+      - --maxmemory-policy
+      - "allkeys-lru"
+      - --save
+      - "60"
+      - "1"
+    volumes:
+      - redis_data:/data
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    networks:
+      - macnet
+
+  # ------------------------------------------------------------
+  # Backend FastAPI — API Gateway (async)
+  # ------------------------------------------------------------
+  backend:
+    <<: *backend-base
+    container_name: mac_backend
+    command: >
+      uvicorn app.main:app
+      --host 0.0.0.0
+      --port 8000
+      --reload
+      --proxy-headers
+      --forwarded-allow-ips='*'
+    volumes:
+      - ./backend:/app:cached     # hot-reload en dev
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/api/v1/health/live"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ------------------------------------------------------------
+  # Worker Celery — Exécution isolée des commandes MAC
+  # ------------------------------------------------------------
+  worker:
+    <<: *backend-base
+    container_name: mac_worker
+    command: >
+      celery -A app.workers.celery_app.celery_app worker
+      --loglevel=INFO
+      --concurrency=2
+      --max-tasks-per-child=50
+    volumes:
+      - ./backend:/app:cached
+    # ⚠️ Capabilities minimales — jamais --privileged
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    # Alternative plus stricte (décommenter si le kernel le supporte) :
+    # security_opt:
+    #   - no-new-privileges:true
+    environment:
+      C_FORCE_ROOT: "false"
+    # Pas de port exposé, communique via Redis uniquement
+
+  # ------------------------------------------------------------
+  # Flower — Monitoring Celery (optionnel en dev)
+  # ------------------------------------------------------------
+  flower:
+    <<: *backend-base
+    container_name: mac_flower
+    command: >
+      celery -A app.workers.celery_app.celery_app flower
+      --port=5555
+      --basic_auth=${FLOWER_USER:-admin}:${FLOWER_PASSWORD:-admin}
+    ports:
+      - "127.0.0.1:5555:5555"
+    profiles: ["monitoring"]   # démarre avec --profile monitoring
+
+  # ------------------------------------------------------------
+  # Frontend React/Vite — placeholder (implémenté en Étape 4)
+  # ------------------------------------------------------------
+  frontend:
+    image: node:20-alpine
+    container_name: mac_frontend
+    working_dir: /app
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    volumes:
+      - ./frontend:/app:cached
+      - frontend_node_modules:/app/node_modules
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL}
+    depends_on:
+      - backend
+    profiles: ["frontend"]     # activable à l'Étape 4
+    networks:
+      - macnet
+
+# ------------------------------------------------------------
+# Volumes persistants
+# ------------------------------------------------------------
+volumes:
+  postgres_data:
+  redis_data:
+  frontend_node_modules:
+
+# ------------------------------------------------------------
+# Réseau isolé
+# ------------------------------------------------------------
+networks:
+  macnet:
+    driver: bridge
