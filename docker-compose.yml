@@ -141,26 +141,47 @@ services:
       - "127.0.0.1:5555:5555"
     profiles: ["monitoring"]   # démarre avec --profile monitoring
 
-  # ------------------------------------------------------------
-  # Frontend React/Vite — placeholder (implémenté en Étape 4)
+    # ------------------------------------------------------------
+  # Frontend — Dev (Vite HMR, via Dockerfile multi-stage target=dev)
   # ------------------------------------------------------------
   frontend:
-    image: node:20-alpine
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: dev
     container_name: mac_frontend
     working_dir: /app
-    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
     volumes:
       - ./frontend:/app:cached
       - frontend_node_modules:/app/node_modules
     ports:
       - "5173:5173"
     environment:
-      VITE_API_BASE_URL: ${VITE_API_BASE_URL}
+      VITE_API_BASE_URL: http://localhost:8000/api/v1
+      VITE_API_PROXY_TARGET: http://backend:8000
     depends_on:
       - backend
-    profiles: ["frontend"]     # activable à l'Étape 4
     networks:
       - macnet
+    profiles: ["dev"]
+
+  # ------------------------------------------------------------
+  # Frontend — Prod (nginx + static build)
+  # ------------------------------------------------------------
+  frontend-prod:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: prod
+    container_name: mac_frontend_prod
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    networks:
+      - macnet
+    profiles: ["prod"]
+    restart: unless-stopped
 
 # ------------------------------------------------------------
 # Volumes persistants
