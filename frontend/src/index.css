@@ -32,6 +32,9 @@
       linear-gradient(rgba(122, 218, 214, 0.05) 1px, transparent 1px),
       linear-gradient(90deg, rgba(122, 218, 214, 0.05) 1px, transparent 1px);
     background-size: 48px 48px;
+  .animate-msg-in {
+    animation: msg-in 380ms cubic-bezier(0.32, 0.72, 0, 1) both;
+  }
   }
   .bg-fade-bottom {
     background: linear-gradient(to bottom, transparent 0%, rgba(9, 14, 25, 0.6) 60%, #090e19 100%);

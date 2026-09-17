@@ -4,6 +4,8 @@ import { Link, Outlet, useNavigate } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { useAuthStore } from "@/stores/authStore"
 
+import { ChatWidget } from "@/components/chat/ChatWidget"
+
 export function AppLayout() {
   const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
@@ -36,6 +38,8 @@ export function AppLayout() {
       <main className="mx-auto max-w-7xl px-6 py-8">
         <Outlet />
       </main>
+
+      <ChatWidget />
     </div>
   )
 }

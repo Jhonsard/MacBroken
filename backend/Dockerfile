@@ -3,6 +3,9 @@
 # ============================================================
 FROM python:3.12-slim AS base
 
+# --- Cache persistant pour pip (BuildKit) ---
+# Permet de réutiliser les paquets déjà téléchargés entre les builds
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
@@ -26,11 +29,27 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # --- Capability NET_ADMIN sur le binaire `ip` (permet à appuser de l'exécuter) ---
-RUN setcap cap_net_admin+ep "$(which ip)"
+# `command -v` est un builtin POSIX (pas besoin de paquet `which`).
+# `readlink -f` résout les symlinks (setcap refuse les symlinks).
+RUN IP_PATH="$(command -v ip || echo /usr/sbin/ip)" \
+    && IP_REAL="$(readlink -f "$IP_PATH")" \
+    && echo "Applying NET_ADMIN to: $IP_REAL" \
+    && setcap cap_net_admin+ep "$IP_REAL" \
+    && getcap "$IP_REAL"
+
+# --- Config pip globale (résilience réseau) ---
+COPY pip.conf /etc/pip.conf
 
 # --- Dépendances Python ---
 COPY requirements.txt .
-RUN pip install --upgrade pip && pip install -r requirements.txt
+
+# --- Dépendances Python (avec retry + timeout pour résilience réseau) ---
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir \
+        --retries 5 \
+        --timeout 60 \
+        -r requirements.txt
 
 # --- Code applicatif ---
 COPY . .
