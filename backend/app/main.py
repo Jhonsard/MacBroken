@@ -14,6 +14,8 @@ from app.api.v1.chat import router as chat_router
 from app.api.v1.ws import router as ws_router
 from app.core.cache import close_redis
 from app.core.config import settings
+from app.core.database import AsyncSessionLocal
+from app.crud.mac_history import cleanup_stale_pending
 
 logging.basicConfig(
     level=settings.LOG_LEVEL,
@@ -29,6 +31,14 @@ async def lifespan(_: FastAPI):
         settings.APP_NAME, settings.APP_ENV, settings.DEBUG,
         settings.MAC_SPOOF_DRY_RUN,
     )
+    # Cleanup stale PENDING entries on startup
+    async with AsyncSessionLocal() as session:
+        try:
+            deleted = await cleanup_stale_pending(session, max_age_minutes=5)
+            if deleted:
+                logger.info("Nettoyage démarrage : %d entrées PENDING orphelines supprimées", deleted)
+        except Exception as exc:
+            logger.warning("Échec nettoyage entrées PENDING : %s", exc)
     yield
     await close_redis()
     logger.info("Arrêt de l'application.")

@@ -4,8 +4,9 @@ CRUD `mac_history` — utilisé par l'API et le worker Celery (Étape 3).
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.mac_history import MacHistory, MacSpoofStatus
@@ -53,3 +54,21 @@ async def set_status(
     await db.flush()
     await db.refresh(entry)
     return entry
+
+
+async def cleanup_stale_pending(
+    db: AsyncSession, max_age_minutes: int = 5,
+) -> int:
+    """
+    Supprime les entrées PENDING plus vieilles que max_age_minutes.
+    Ces entrées sont orphelines (worker crash avant completion).
+    Retourne le nombre d'entrées supprimées.
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=max_age_minutes)
+    stmt = delete(MacHistory).where(
+        MacHistory.status == MacSpoofStatus.PENDING,
+        MacHistory.timestamp < cutoff,
+    )
+    result = await db.execute(stmt)
+    await db.commit()
+    return result.rowcount

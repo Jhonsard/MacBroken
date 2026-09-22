@@ -4,11 +4,16 @@ Utilise Pydantic Settings v2 pour la validation et le typage strict.
 """
 from __future__ import annotations
 
+import logging
+import warnings
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, PostgresDsn, RedisDsn, field_validator
+from pydantic import Field, PostgresDsn, RedisDsn, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -54,7 +59,7 @@ class Settings(BaseSettings):
     # --- Worker MAC ---
     DEFAULT_INTERFACE: str = "eth0"
     IP_BIN: str = "/usr/sbin/ip"
-    MAC_SPOOF_DRY_RUN: bool = True
+    MAC_SPOOF_DRY_RUN: bool = False
     MAC_SPOOF_RATE_LIMIT_SECONDS: int = 30
     MAC_SPOOF_CMD_TIMEOUT: int = 5
 
@@ -66,6 +71,26 @@ class Settings(BaseSettings):
         if isinstance(v, str):
             return [item.strip() for item in v.split(",") if item.strip()]
         return v
+
+    @model_validator(mode="after")
+    def _validate_prod_dry_run(self) -> "Settings":
+        if self.APP_ENV == "production" and self.MAC_SPOOF_DRY_RUN:
+            msg = (
+                "⚠️  ATTENTION : MAC_SPOOF_DRY_RUN=True en PRODUCTION ! "
+                "Aucun changement MAC réel ne sera appliqué. "
+                "Définissez MAC_SPOOF_DRY_RUN=false pour activer le spoofing réel."
+            )
+            logger.warning(msg)
+            warnings.warn(msg, RuntimeWarning, stacklevel=2)
+        if self.APP_ENV == "production" and not self.ALLOWED_INTERFACES:
+            msg = (
+                "⚠️  ATTENTION : ALLOWED_INTERFACES vide en PRODUCTION ! "
+                "Aucune interface ne sera spoofable par défaut. "
+                "Définissez ALLOWED_INTERFACES=eth0,wlan0,... pour autoriser."
+            )
+            logger.warning(msg)
+            warnings.warn(msg, RuntimeWarning, stacklevel=2)
+        return self
 
     # --- Frontend ---
     VITE_API_BASE_URL: str = "http://localhost:8000/api/v1"
