@@ -31,11 +31,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # --- Capability NET_ADMIN sur le binaire `ip` (permet à appuser de l'exécuter) ---
 # `command -v` est un builtin POSIX (pas besoin de paquet `which`).
 # `readlink -f` résout les symlinks (setcap refuse les symlinks).
-RUN IP_PATH="$(command -v ip || echo /usr/sbin/ip)" \
-    && IP_REAL="$(readlink -f "$IP_PATH")" \
-    && echo "Applying NET_ADMIN to: $IP_REAL" \
-    && setcap cap_net_admin+ep "$IP_REAL" \
-    && getcap "$IP_REAL"
+#RUN IP_PATH="$(command -v ip || echo /usr/sbin/ip)" \
+#    && IP_REAL="$(readlink -f "$IP_PATH")" \
+#    && echo "Applying NET_ADMIN to: $IP_REAL" \
+#    && setcap cap_net_admin+ep "$IP_REAL" \
+#    && getcap "$IP_REAL"
 
 # --- Config pip globale (résilience réseau) ---
 COPY pip.conf /etc/pip.conf
