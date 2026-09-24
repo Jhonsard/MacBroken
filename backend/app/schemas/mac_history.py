@@ -9,7 +9,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.mac_history import MacSpoofStatus
-from app.services import mac_spoofing
+from app.schemas.mac_validators import is_valid_mac, normalize_mac
 
 # Regex MAC : format de base aa:bb:cc:dd:ee:ff (minuscules avec :)
 MAC_PATTERN = r"^([0-9a-f]{2}:){5}[0-9a-f]{2}$"
@@ -27,8 +27,8 @@ class MacHistoryBase(BaseModel):
     @field_validator("original_mac", "spoofed_mac", mode="before")
     @classmethod
     def _validate_mac(cls, v: str) -> str:
-        normalized = mac_spoofing.normalize_mac(v)
-        if not mac_spoofing.is_valid_mac(normalized):
+        normalized = normalize_mac(v)
+        if not is_valid_mac(normalized):
             raise ValueError("MAC invalide : doit être unicast, non-null, non-broadcast/multicast")
         return normalized
 

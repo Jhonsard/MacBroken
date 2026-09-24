@@ -9,7 +9,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.schemas.mac_history import MacHistoryRead
 from app.models.mac_history import MacSpoofStatus
-from app.services import mac_spoofing
+from app.schemas.mac_validators import is_valid_mac, normalize_mac
 
 MAC_PATTERN = r"^([0-9a-f]{2}:){5}[0-9a-f]{2}$"
 IFACE_PATTERN = r"^[a-z][a-z0-9._-]{0,14}$"
@@ -44,8 +44,8 @@ class CanSpoofRequest(BaseModel):
     def _validate_spoofed_mac(cls, v: str | None) -> str | None:
         if v is None:
             return v
-        normalized = mac_spoofing.normalize_mac(v)
-        if not mac_spoofing.is_valid_mac(normalized):
+        normalized = normalize_mac(v)
+        if not is_valid_mac(normalized):
             raise ValueError("MAC invalide : doit être unicast, non-null, non-broadcast/multicast")
         return normalized
 
@@ -75,8 +75,8 @@ class SpoofRequest(BaseModel):
     def _validate_spoofed_mac(cls, v: str | None) -> str | None:
         if v is None:
             return v
-        normalized = mac_spoofing.normalize_mac(v)
-        if not mac_spoofing.is_valid_mac(normalized):
+        normalized = normalize_mac(v)
+        if not is_valid_mac(normalized):
             raise ValueError("MAC invalide : doit être unicast, non-null, non-broadcast/multicast")
         return normalized
 
