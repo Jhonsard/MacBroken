@@ -58,7 +58,7 @@ class Settings(BaseSettings):
 
     # --- Worker MAC ---
     DEFAULT_INTERFACE: str = "eth0"
-    IP_BIN: str = "/usr/sbin/ip"
+    IP_BIN: str | None = None
     MAC_SPOOF_DRY_RUN: bool = False
     MAC_SPOOF_RATE_LIMIT_SECONDS: int = 30
     MAC_SPOOF_CMD_TIMEOUT: int = 5

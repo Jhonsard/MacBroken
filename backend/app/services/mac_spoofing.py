@@ -18,6 +18,7 @@ import json
 import logging
 import random
 import re
+import shutil
 import subprocess
 from dataclasses import dataclass
 from typing import Any
@@ -45,6 +46,13 @@ INVALID_MACS = {
     "01:00:5e:00:00:01",
 }
 
+# Chemins courants pour le binaire `ip`
+IP_BIN_CANDIDATES = (
+    "/usr/sbin/ip",
+    "/bin/ip",
+    "/usr/bin/ip",
+    "/sbin/ip",
+)
 
 # ------------------------------------------------------------------
 # Exceptions métier
@@ -121,6 +129,48 @@ def normalize_mac(mac: str) -> str:
 
 
 # ------------------------------------------------------------------
+# Détection binaire `ip`
+# ------------------------------------------------------------------
+def _resolve_ip_bin(configured: str | None = None) -> str:
+    """
+    Résout le chemin du binaire `ip`.
+    Priorité : config explicite > PATH > candidats courants.
+    """
+    # 1. Config explicite
+    if configured:
+        return configured
+
+    # 2. PATH (shutil.which)
+    found = shutil.which("ip")
+    if found:
+        return found
+
+    # 3. Candidats courants
+    for candidate in IP_BIN_CANDIDATES:
+        try:
+            subprocess.run([candidate, "-V"], capture_output=True, check=True, timeout=1)
+            return candidate
+        except Exception:
+            continue
+
+    # Fallback : dernier recours
+    return "ip"
+
+
+# Cache the resolved binary path
+_resolved_ip_bin: str | None = None
+
+
+def _get_ip_bin() -> str:
+    global _resolved_ip_bin
+    if _resolved_ip_bin is None:
+        _resolved_ip_bin = _resolve_ip_bin(settings.IP_BIN)
+        if _resolved_ip_bin != settings.IP_BIN:
+            logger.info("Binaire `ip` résolu automatiquement : %s", _resolved_ip_bin)
+    return _resolved_ip_bin
+
+
+# ------------------------------------------------------------------
 # Exécution commandes `ip`
 # ------------------------------------------------------------------
 def _run_ip(args: list[str], timeout: int | None = None) -> subprocess.CompletedProcess[str]:
@@ -130,7 +180,7 @@ def _run_ip(args: list[str], timeout: int | None = None) -> subprocess.Completed
     - timeout strict
     - capture stdout/stderr
     """
-    cmd = [settings.IP_BIN, *args]
+    cmd = [_get_ip_bin(), *args]
     try:
         result = subprocess.run(
             cmd,
@@ -141,7 +191,7 @@ def _run_ip(args: list[str], timeout: int | None = None) -> subprocess.Completed
             check=False,
         )
     except FileNotFoundError as exc:
-        raise SystemCommandError(f"Binaire `ip` introuvable ({settings.IP_BIN}).") from exc
+        raise SystemCommandError(f"Binaire `ip` introuvable ({_get_ip_bin()}).") from exc
     except subprocess.TimeoutExpired as exc:
         raise SystemCommandError(
             f"Timeout ({timeout or settings.MAC_SPOOF_CMD_TIMEOUT}s) sur : {' '.join(cmd)}",
